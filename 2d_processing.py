@@ -1,5 +1,8 @@
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
+
+AREA_THRESHOLD = 100
 
 def empty(a):
     pass
@@ -9,7 +12,7 @@ def empty(a):
 def hsv_trackbars(img):
     # default: 130 136 40 52 110 131
     cv2.namedWindow("TrackBars", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("TrackBars",  640, 200)
+    cv2.resizeWindow("TrackBars",  840, 240)
     cv2.createTrackbar("Hue Min", "TrackBars", 130, 179, empty)
     cv2.createTrackbar("Hue Max", "TrackBars", 136, 179, empty)
     cv2.createTrackbar("Sat Min", "TrackBars", 40, 255, empty)
@@ -46,7 +49,7 @@ def hsv_trackbars(img):
         all_img = np.concatenate((img1, imgResult), axis=1)
 
         cv2.imshow("HSV Threshold Mask", all_img)
-        mask = cv2.resize(mask, (mask.shape[1]//2, mask.shape[0]//2)) # make smaller
+        mask = cv2.resize(mask, (mask.shape[1], mask.shape[0])) # make smaller
         cv2.imshow("Mask", mask)
 
         # repeat every 1 ms and break if 'q' is pressed
@@ -62,7 +65,7 @@ def canny_trackbar(img):
     imgHSV = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     # imgBlur = cv2.GaussianBlur(imgGray, (7,7), 0) # blue the image slightly using a 7,7 mask
 
-    cv2.namedWindow("Edge Detection TrackBars")
+    cv2.namedWindow("Edge Detection TrackBars", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Edge Detection TrackBars", 640, 240)
     cv2.createTrackbar("Canny Min", "Edge Detection TrackBars", 0, 255, empty)
     cv2.createTrackbar("Canny Max", "Edge Detection TrackBars", 255, 255, empty)
@@ -79,10 +82,39 @@ def canny_trackbar(img):
             break
     return imgCanny
 
+def getContours(img, imgContour):
+    contours, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE) # method for finding contours; try others
+    print("Found", len(contours), "contours")
+    for cnt in contours: # contours saved in contours
+        # find the area
+        area = cv2.contourArea(cnt)
+        
+        # draw the contour
+        cv2.drawContours(imgContour, cnt, -1, (255, 0, 0), 3) # -1 means all of the contours
+
+        if area>AREA_THRESHOLD:
+            peri = cv2.arcLength(cnt, True) # true is saying the arc is closed
+
+            # get the points of corners in polygons
+            approx = cv2.approxPolyDP(cnt, 0.02*peri, True) # epsilon (2nd parameter) is accuracy
+
+            # draw a bounding box
+            x, y, w, h = cv2.boundingRect(approx)
+            cv2.rectangle(imgContour, (x, y), (x+w, y+h), (0, 255, 0), 2)
+            cv2.putText(imgContour, "Area:"+ str(area),
+                        ((x+w), y+h), cv2.FONT_HERSHEY_COMPLEX,
+                        0.5, (255, 255, 255), 1)
+
+
+
 
 def main():
     file_name = "Caren_Graphene_50x_cropped.png"
-    img = cv2.imread(file_name)
+    #file_name = "graphene_close.jpg"
+    original_img = cv2.imread(file_name)
+    #print("original shape:", original_img.shape)
+    #original_img = cv2.resize(original_img, (original_img.shape[1]//4, original_img.shape[0]//4))
+    img = original_img.copy()
 
     # calibrate the HSV trackbars 
     if True:
@@ -97,6 +129,38 @@ def main():
     # apply edge detection
     imgCanny = canny_trackbar(img)
     print(imgCanny.shape)
+
+    # draw bounding boxes on this edge image
+    imgContour = img.copy()
+    getContours(imgCanny, imgContour)
+
+    all_img = np.concatenate((original_img, imgContour), axis=1)
+    cv2.imshow("Original + Contour Image", all_img)
+    k = cv2.waitKey(0) & 0xFF
+    if k == ord('q'):
+        cv2.destroyAllWindows()
+
+    # horizontal line cuts to check entropy
+    '''
+    img_w_lines = original_img.copy()
+    cv2.line(img_w_lines, (0, 200), (img_w_lines.shape[1], 200), (0, 0, 0),1) # red line of thickness 1
+    cv2.line(img_w_lines, (0, 400), (img_w_lines.shape[1], 400), (0, 0, 0),1) # red line of thickness 1
+    cv2.line(img_w_lines, (0, 600), (img_w_lines.shape[1], 600), (0, 0, 0),1) # red line of thickness 1
+    cv2.imshow("Line cuts", img_w_lines)
+    cv2.waitKey(0)
+
+    print("Line cut:")
+    cut1 = original_img[200][:]
+    cut2 = original_img[400][:]
+    cut3 = original_img[600][:]
+    plt.plot(cut1)
+    plt.show()
+    plt.plot(cut2)
+    plt.show()
+    plt.plot(cut3)
+    plt.show()
+    '''
+
 
 
 
